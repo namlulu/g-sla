@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 function App() {
   const [location, setLocation] = useState({ latitude: null, longitude: null });
   const [chargingStations, setChargingStations] = useState([]);
+  const [isGptLoading, setIsGptLoading] = useState(false);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition((position) => {
@@ -10,20 +11,21 @@ function App() {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       });
+
+      if (position.coords.latitude && position.coords.longitude) {
+        const question = `
+        전기차 충전소 정보: 위도 ${position.coords.latitude}, 경도 ${position.coords.longitude} 근처에 있는 전기차 충전소는 어디야? 최신 정보랑 실시간 정보는 필요없어. 또한 답변의 예시는 [충전소, 충전소, 충전소] 이런 포맷으로 알려줘. 포맷 그대로 응답하지 말고 실제 충전소 이름을 앞에 붙여서 줘야해`;
+
+        gpt(question);
+      } else {
+        alert("위도 경도가 인식되지 않았습니다. 새로고침을 하셔야 합니다.");
+      }
     });
   }, []);
 
-  useEffect(() => {
-    if (location.latitude && location.longitude) {
-      // 위치 정보를 토대로 질문을 생성합니다.
-      const question = `
-      전기차 충전소 정보: 위도 ${location.latitude}, 경도 ${location.longitude} 근처에 있는 전기차 충전소는 어디인가요? 최신 정보는 필요없습니다. 또한 답변의 예시는 [A 충전소, B 충전소, C 충전소]로 알려줘.`;
+  const gpt = async (qna) => {
+    setIsGptLoading(true);
 
-      gpt(question);
-    }
-  }, [location]);
-
-  async function gpt(qna) {
     fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -32,12 +34,35 @@ function App() {
       },
       body: JSON.stringify({
         model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: "야!" }],
+        messages: [{ role: "user", content: qna }],
       }),
     })
       .then((res) => res.json())
-      .then((data) => console.log(JSON.stringify(data, null, 2)));
-  }
+      .then((data) => {
+        try {
+          const newData = data?.choices[0]?.message?.content;
+          const start = newData.indexOf("[");
+          const end = newData.indexOf("]");
+          const stations = newData
+            .slice(start + 1, end)
+            .split(",")
+            .filter(
+              (station) => station.includes("충전") && station !== "충전소"
+            );
+
+          console.log(stations);
+          setChargingStations(stations);
+        } catch (e) {
+          setChargingStations([]);
+        }
+      })
+      .catch(() => setChargingStations([]))
+      .finally(() => setIsGptLoading(false));
+  };
+
+  const toMap = (spot) => {
+    window.location.href = `https://www.google.co.kr/maps/search/${spot}`;
+  };
 
   return (
     <div className="App">
@@ -51,10 +76,19 @@ function App() {
       )}
 
       <h1>전기차 충전소 정보</h1>
-      {chargingStations ? (
-        <p>{chargingStations}</p>
+
+      {/* loading */}
+      {isGptLoading ? <p>충전소 정보 가져오는 중</p> : <div></div>}
+
+      {/* 충전소 정보 */}
+      {chargingStations.length > 0 ? (
+        chargingStations.map((station, index) => (
+          <p key={station + `${index}`} onClick={() => toMap(station)}>
+            {station.replaceAll(",", "").replaceAll('"', "")}
+          </p>
+        ))
       ) : (
-        <p>전기차 충전소 정보를 가져오는 중...</p>
+        <p>chat GPT를 통해 충전소 정보를 검색하고 있습니다.</p>
       )}
     </div>
   );
