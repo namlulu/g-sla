@@ -26,13 +26,10 @@ function App() {
   const gpt = async (qna) => {
     setIsGptLoading(true);
 
-    const SK = "sk";
-    const PW = "PmOKONxRK0flC3nf119fT3BlbkFJavcfTJNRW3ZhqcQUkARh";
-
     fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${SK}-${PW}`,
+        Authorization: `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
